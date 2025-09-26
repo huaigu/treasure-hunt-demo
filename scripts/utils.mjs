@@ -47,6 +47,35 @@ export async function tryGetWeb3ClientVersion() {
   }
 }
 
+async function getBlockNumber(url) {
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_blockNumber",
+      params: [],
+    }),
+  });
+  if (!r.ok) {
+    throw new Error("Http status:" + r.status + " " + r.statusText);
+  }
+  const data = await r.json();
+  if (data.error) {
+    throw new Error("Unknown error");
+  }
+  return data.result;
+}
+
+export async function tryGetBlockNumber() {
+  try {
+    return await getBlockNumber("http://localhost:8545");
+  } catch (e) {
+    return undefined;
+  }
+}
+
 export async function checkIfHardhatNodeIsRunning() {
   const rootDir = path.resolve("..");
 

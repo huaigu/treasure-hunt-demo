@@ -9,23 +9,24 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const chainId = await hre.getChainId();
   const chainName = hre.network.name;
 
-  const contractName = "FHECounter";
-  const deployed = await deploy(contractName, {
+  // Deploy TreasureHunt contract
+  const treasureHuntName = "TreasureHunt";
+  const treasureHuntDeployed = await deploy(treasureHuntName, {
     from: deployer,
     log: true,
   });
 
-  console.log(`${contractName} contract address: ${deployed.address}`);
-  console.log(`${contractName} chainId: ${chainId}`);
-  console.log(`${contractName} chainName: ${chainName}`);
+  console.log(`${treasureHuntName} contract address: ${treasureHuntDeployed.address}`);
+  console.log(`${treasureHuntName} chainId: ${chainId}`);
+  console.log(`${treasureHuntName} chainName: ${chainName}`);
 
   // Generates:
-  //  - <root>/packages/site/abi/FHECounterABI.ts
-  //  - <root>/packages/site/abi/FHECounterAddresses.ts
-  postDeploy(chainName, contractName);
+  //  - <root>/packages/site/abi/TreasureHuntABI.ts
+  //  - <root>/packages/site/abi/TreasureHuntAddresses.ts
+  postDeploy(chainName, treasureHuntName);
 };
 
 export default func;
 
-func.id = "deploy_fheCounter"; // id required to prevent reexecution
-func.tags = ["FHECounter"];
+func.id = "deploy_contracts"; // id required to prevent reexecution
+func.tags = ["TreasureHunt"];
