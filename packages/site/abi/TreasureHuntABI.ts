@@ -135,12 +135,7 @@ export const TreasureHuntABI = {
         },
         {
           "internalType": "bytes",
-          "name": "proofX",
-          "type": "bytes"
-        },
-        {
-          "internalType": "bytes",
-          "name": "proofY",
+          "name": "attestation",
           "type": "bytes"
         }
       ],
@@ -163,12 +158,7 @@ export const TreasureHuntABI = {
         },
         {
           "internalType": "bytes",
-          "name": "proofX",
-          "type": "bytes"
-        },
-        {
-          "internalType": "bytes",
-          "name": "proofY",
+          "name": "attestation",
           "type": "bytes"
         }
       ],

@@ -266,25 +266,21 @@ export function useTreasureHunt({
       console.log(`signerAddress: ${signerAddress}`)
       console.log(`contractAddress: ${contractAddress}`)
 
-      const encryptedInputX = await instance
+      // Create a single encrypted input with both x and y coordinates
+      const encryptedInput = await instance
         .createEncryptedInput(contractAddress, signerAddress)
         .add8(x)
-        .encrypt();
-
-      const encryptedInputY = await instance
-        .createEncryptedInput(contractAddress, signerAddress)
         .add8(y)
         .encrypt();
 
-      console.log(`submit guess: ${encryptedInputX}, ${encryptedInputY}`)
+      console.log(`submit guess with handles:`, encryptedInput.handles)
       setMessage("Submitting encrypted guess...");
 
-      console.log(encryptedInputX.handles[0])
+      // Use handles[0] for x, handles[1] for y, and the shared inputProof
       const tx = await contractWithSigner.guess(
-        encryptedInputX.handles[0],
-        encryptedInputY.handles[0],
-        encryptedInputX.inputProof,
-        encryptedInputY.inputProof
+        encryptedInput.handles[0],
+        encryptedInput.handles[1],
+        encryptedInput.inputProof
       );
 
       setMessage("Transaction submitted, waiting for confirmation...");

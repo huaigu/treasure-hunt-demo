@@ -24,30 +24,28 @@ contract TreasureHunt is Ownable, SepoliaConfig {
     // Constructor calls Ownable constructor, setting the deployer as owner
     constructor() Ownable(msg.sender) {}
 
-   function createTreasure() external onlyOwner {
+    function createTreasure() external onlyOwner {
         require(!isTreasureSet, "Treasure is already set!");
 
         // Generate full-domain random and reduce to 0..7 so it's in same domain as later computations
-        // randEuint8() -> full-domain euint8; rem expects a plaintext divisor
+        // randEuint8() -> full-domain euint8; rem expects plaintext divisor
         secretX = FHE.rem(FHE.randEuint8(), 8);
         secretY = FHE.rem(FHE.randEuint8(), 8);
+
+        FHE.allow(secretX, address(this));
+        FHE.allow(secretY, address(this));
 
         isTreasureSet = true;
         emit TreasureCreated();
     }
 
     /// @notice Submit an encrypted guess for the treasure location
-    function guess(
-        externalEuint8 inputX,
-        externalEuint8 inputY,
-        bytes calldata proofX,
-        bytes calldata proofY
-    ) external {
+    function guess(externalEuint8 inputX, externalEuint8 inputY, bytes calldata attestation) external {
         require(isTreasureSet, "Treasure has not been set yet!");
 
-        // Convert external inputs and reduce them to 0..7 to match secretX/secretY domain
-        euint8 guessX = FHE.rem(FHE.fromExternal(inputX, proofX), 8);
-        euint8 guessY = FHE.rem(FHE.fromExternal(inputY, proofY), 8);
+        // Convert both inputs using the same attestation
+        euint8 guessX = FHE.rem(FHE.fromExternal(inputX, attestation), 8);
+        euint8 guessY = FHE.rem(FHE.fromExternal(inputY, attestation), 8);
 
         // X-axis absolute diff: do both orders and select based on comparison
         euint8 diffX1 = FHE.sub(guessX, secretX);
@@ -83,22 +81,15 @@ contract TreasureHunt is Ownable, SepoliaConfig {
         // Use FHE.select to create a side-effect-free encrypted value, or request decryption to learn plaintext.
     }
 
-
     /// @notice Simple test function that just adds coordinates together (for testing)
     /// @param inputX the encrypted X coordinate input
     /// @param inputY the encrypted Y coordinate input
-    /// @param proofX the input proof for X coordinate
-    /// @param proofY the input proof for Y coordinate
-    function guessSimple(
-        externalEuint8 inputX,
-        externalEuint8 inputY,
-        bytes calldata proofX,
-        bytes calldata proofY
-    ) external {
+    /// @param attestation the attestation for both inputs
+    function guessSimple(externalEuint8 inputX, externalEuint8 inputY, bytes calldata attestation) external {
         require(isTreasureSet, "Treasure has not been set yet!");
 
-        euint8 guessX = FHE.fromExternal(inputX, proofX);
-        euint8 guessY = FHE.fromExternal(inputY, proofY);
+        euint8 guessX = FHE.fromExternal(inputX, attestation);
+        euint8 guessY = FHE.fromExternal(inputY, attestation);
 
         // SIMPLIFIED TEST VERSION: Just add the coordinates together
         euint8 simpleResult = FHE.add(guessX, guessY);
