@@ -4,6 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TreasureHuntABI } from "../abi/TreasureHuntABI";
 import { TreasureHuntAddresses } from "../abi/TreasureHuntAddresses";
 
+export interface GuessHistory {
+  x: number;
+  y: number;
+  distance: number; // -1 means not decrypted yet
+  timestamp: number;
+}
+
 export interface UseTreasureHuntOptions {
   instance: FhevmInstance | undefined;
   fhevmDecryptionSignatureStorage: GenericStringStorage;
@@ -29,6 +36,9 @@ export interface TreasureHuntHook {
   decryptedDistance: number | undefined;
   isDecrypted: boolean;
 
+  // Guess History
+  guessHistory: GuessHistory[];
+
   // UI States
   isRefreshing: boolean;
   isDecrypting: boolean;
@@ -47,6 +57,7 @@ export interface TreasureHuntHook {
   decryptDistance: () => Promise<void>;
   refreshGameState: () => Promise<void>;
   resetGame: () => Promise<void>;
+  clearHistory: () => void;
 
   // Status
   message: string;
@@ -76,12 +87,16 @@ export function useTreasureHunt({
     return addr ? addr !== "0x0000000000000000000000000000000000000000" : false;
   }, [chainId]);
 
+  // Get user address for localStorage key
+  const [userAddress, setUserAddress] = useState<string>("");
+
   // State
   const [isTreasureReady, setIsTreasureReady] = useState<boolean | undefined>(undefined);
   const [isOwner, setIsOwner] = useState(false);
   const [encryptedDistance, setEncryptedDistance] = useState<string | undefined>();
   const [decryptedDistance, setDecryptedDistance] = useState<number | undefined>();
   const [isDecrypted, setIsDecrypted] = useState(false);
+  const [guessHistory, setGuessHistory] = useState<GuessHistory[]>([]);
 
   // UI states
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -92,6 +107,44 @@ export function useTreasureHunt({
 
   // Ref to prevent duplicate refresh calls
   const isRefreshingRef = useRef(false);
+
+  // localStorage key for guess history
+  const storageKey = useMemo(() => {
+    if (!contractAddress || !userAddress) return null;
+    return `treasure-hunt-history-${contractAddress}-${userAddress}`;
+  }, [contractAddress, userAddress]);
+
+  // Load guess history from localStorage
+  const loadHistory = useCallback(() => {
+    if (!storageKey) return [];
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        return JSON.parse(saved) as GuessHistory[];
+      }
+    } catch (error) {
+      console.error("Error loading guess history:", error);
+    }
+    return [];
+  }, [storageKey]);
+
+  // Save guess history to localStorage
+  const saveHistory = useCallback((history: GuessHistory[]) => {
+    if (!storageKey) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(history));
+    } catch (error) {
+      console.error("Error saving guess history:", error);
+    }
+  }, [storageKey]);
+
+  // Clear guess history
+  const clearHistory = useCallback(() => {
+    if (storageKey) {
+      localStorage.removeItem(storageKey);
+    }
+    setGuessHistory([]);
+  }, [storageKey]);
 
   // Capabilities
   const canCreateTreasure = useMemo(() => {
@@ -120,6 +173,34 @@ export function useTreasureHunt({
     if (!contractAddress || !ethersSigner) return null;
     return new Contract(contractAddress, TreasureHuntABI.abi, ethersSigner);
   }, [contractAddress, ethersSigner]);
+
+  // Get and set user address
+  useEffect(() => {
+    if (!ethersSigner) {
+      setUserAddress("");
+      return;
+    }
+
+    const getUserAddress = async () => {
+      try {
+        const address = await ethersSigner.getAddress();
+        setUserAddress(address);
+      } catch (error) {
+        console.error("Error getting user address:", error);
+        setUserAddress("");
+      }
+    };
+
+    getUserAddress();
+  }, [ethersSigner]);
+
+  // Load guess history from localStorage when storageKey changes
+  useEffect(() => {
+    if (storageKey) {
+      const history = loadHistory();
+      setGuessHistory(history);
+    }
+  }, [storageKey, loadHistory]);
 
   // Check ownership
   useEffect(() => {
@@ -286,6 +367,17 @@ export function useTreasureHunt({
       setMessage("Transaction submitted, waiting for confirmation...");
       await tx.wait();
 
+      // Add to guess history with distance -1 (not decrypted yet)
+      const newGuess: GuessHistory = {
+        x,
+        y,
+        distance: -1,
+        timestamp: Date.now()
+      };
+      const updatedHistory = [...guessHistory, newGuess];
+      setGuessHistory(updatedHistory);
+      saveHistory(updatedHistory);
+
       setMessage("Guess submitted successfully! Click 'Decrypt Distance' to see the result.");
 
       // Refresh to get the new encrypted distance
@@ -335,6 +427,20 @@ export function useTreasureHunt({
       setDecryptedDistance(decrypted);
       setIsDecrypted(true);
 
+      // Update the most recent guess with decrypted distance
+      if (guessHistory.length > 0) {
+        const updatedHistory = [...guessHistory];
+        const lastGuessIndex = updatedHistory.length - 1;
+        if (updatedHistory[lastGuessIndex].distance === -1) {
+          updatedHistory[lastGuessIndex] = {
+            ...updatedHistory[lastGuessIndex],
+            distance: decrypted
+          };
+          setGuessHistory(updatedHistory);
+          saveHistory(updatedHistory);
+        }
+      }
+
       setMessage("FHEVM userDecrypt completed!");
 
       // Set message based on distance
@@ -372,6 +478,9 @@ export function useTreasureHunt({
       setDecryptedDistance(undefined);
       setIsDecrypted(false);
 
+      // Clear guess history when game is reset
+      clearHistory();
+
       await refreshGameState();
     } catch (error) {
       console.error("Error resetting game:", error);
@@ -393,6 +502,9 @@ export function useTreasureHunt({
     decryptedDistance,
     isDecrypted,
 
+    // Guess History
+    guessHistory,
+
     // UI States
     isRefreshing,
     isDecrypting,
@@ -411,6 +523,7 @@ export function useTreasureHunt({
     decryptDistance,
     refreshGameState,
     resetGame,
+    clearHistory,
 
     // Status
     message,

@@ -151,6 +151,21 @@ export const TreasureHuntDemo = () => {
     return { x: index % 8, y: Math.floor(index / 8) };
   };
 
+  // Get distance color based on value
+  const getDistanceColor = (distance: number) => {
+    if (distance === 0) return 'bg-yellow-400 glow-accent'; // Treasure found!
+    if (distance === -1) return 'bg-gray-500/50'; // Not decrypted yet
+    if (distance <= 2) return 'bg-red-500 glow-destructive'; // Very close
+    if (distance <= 5) return 'bg-orange-500'; // Close
+    if (distance <= 10) return 'bg-yellow-500'; // Medium
+    return 'bg-blue-500'; // Far
+  };
+
+  // Check if a position has been guessed
+  const getGuessAtPosition = (x: number, y: number) => {
+    return treasureHunt.guessHistory.find(guess => guess.x === x && guess.y === y);
+  };
+
   // Show error if contract is not deployed
   if (isConnected && isOnSepolia && treasureHunt.isDeployed === false) {
     return errorNotDeployed(chainId);
@@ -188,26 +203,45 @@ export const TreasureHuntDemo = () => {
                     </p>
                   )}
                 </div>
-                <div className="grid grid-cols-8 gap-1 max-w-64 mx-auto">
+                <div className="grid grid-cols-8 gap-1 max-w-80 mx-auto">
                   {Array.from({ length: 64 }, (_, index) => {
                     const coords = indexToCoords(index);
                     const isSelected = selectedPosition &&
                       selectedPosition.x === coords.x &&
                       selectedPosition.y === coords.y;
 
-                    // Show treasure at position 29 (for demo purposes)
-                    const isTreasure = index === 29;
+                    // Check if this position has been guessed
+                    const guess = getGuessAtPosition(coords.x, coords.y);
+                    const isGuessed = !!guess;
+                    const distance = guess?.distance;
 
                     return (
                       <div
                         key={index}
-                        className={`w-6 h-6 rounded-sm transition-all duration-300 ${
-                          isTreasure ? 'bg-accent animate-pulse glow-accent' :
-                          isSelected ? 'bg-primary ring-2 ring-primary/30 glow-primary' : 'bg-muted-foreground/30'
-                        } cursor-pointer hover:bg-primary/60`}
+                        className={`w-9 h-9 rounded-sm transition-all duration-300 flex items-center justify-center text-xs font-bold cursor-pointer hover:opacity-80 ${
+                          isGuessed && distance !== undefined
+                            ? getDistanceColor(distance)
+                            : isSelected
+                            ? 'bg-primary ring-2 ring-primary/30 glow-primary'
+                            : 'bg-muted-foreground/30 hover:bg-primary/60'
+                        }`}
                         onClick={() => handleGridClick(coords.x, coords.y)}
-                        title={`Position (${coords.x}, ${coords.y})`}
-                      />
+                        title={
+                          isGuessed && distance !== undefined
+                            ? distance === 0
+                              ? `TREASURE FOUND! (${coords.x}, ${coords.y})`
+                              : distance === -1
+                              ? `Guessed (${coords.x}, ${coords.y}) - Click "Decrypt Distance"`
+                              : `Guessed (${coords.x}, ${coords.y}) - Distance: ${distance}`
+                            : `Position (${coords.x}, ${coords.y})`
+                        }
+                      >
+                        {isGuessed && distance !== undefined && (
+                          <span className="text-white drop-shadow-md">
+                            {distance === 0 ? '🏆' : distance === -1 ? '?' : distance}
+                          </span>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -422,6 +456,45 @@ export const TreasureHuntDemo = () => {
                 )}
               </div>
             </div>
+
+            {/* Guess History */}
+            {treasureHunt.guessHistory.length > 0 && (
+              <div className="bg-card rounded-lg border border-border p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold text-card-foreground">Guess History</h2>
+                  <button
+                    onClick={treasureHunt.clearHistory}
+                    className="text-xs px-3 py-1 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {treasureHunt.guessHistory.slice().reverse().map((guess) => (
+                    <div
+                      key={`${guess.x}-${guess.y}-${guess.timestamp}`}
+                      className="flex justify-between items-center text-sm p-2 bg-muted rounded"
+                    >
+                      <span className="font-mono text-muted-foreground">
+                        ({guess.x}, {guess.y})
+                      </span>
+                      <span className={`font-bold ${
+                        guess.distance === 0 ? 'text-yellow-500' :
+                        guess.distance === -1 ? 'text-gray-500' :
+                        guess.distance <= 2 ? 'text-red-500' :
+                        guess.distance <= 5 ? 'text-orange-500' :
+                        guess.distance <= 10 ? 'text-yellow-600' :
+                        'text-blue-500'
+                      }`}>
+                        {guess.distance === 0 ? '🏆 Found!' :
+                         guess.distance === -1 ? '? Pending' :
+                         `Distance: ${guess.distance}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Instructions */}
             <div className="bg-primary/5 rounded-lg border border-primary/20 p-6">
