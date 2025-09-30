@@ -2,6 +2,222 @@
 @tailwind components;
 @tailwind utilities;
 
+/* FHEVM Treasure Hunt Design System - Inspired by Zama AI Documentation
+All colors MUST be HSL. Light theme with yellow/gold accents matching Zama docs.
+*/
+
+@layer base {
+  :root {
+    /* Zama documentation-inspired color palette */
+    --background: 0 0% 100%;         /* #FFFFFF - Clean White Background */
+    --foreground: 36 18% 11%;        /* #201D13 - Dark Brown Text */
+
+    --card: 0 0% 98%;                /* #FAFAFA - Light gray for cards */
+    --card-foreground: 36 18% 11%;   /* Dark Brown */
+
+    --popover: 0 0% 100%;            /* White */
+    --popover-foreground: 36 18% 11%; /* Dark Brown */
+
+    --primary: 46 100% 52%;          /* #FFD208 - Zama Gold/Yellow Accent */
+    --primary-foreground: 36 18% 11%; /* Dark Brown on yellow */
+
+    --secondary: 0 0% 96%;           /* #F5F5F5 - Light gray for secondary elements */
+    --secondary-foreground: 0 0% 11%; /* #1D1D1D - Dark Gray */
+
+    --muted: 0 0% 96%;               /* #F5F5F5 - Muted background */
+    --muted-foreground: 0 0% 45%;    /* #737373 - Medium Gray */
+
+    --accent: 46 100% 52%;           /* #FFD208 - Same as primary for consistency */
+    --accent-foreground: 36 18% 11%; /* Dark Brown */
+
+    --destructive: 0 84% 60%;        /* Red for errors */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;              /* #E5E5E5 - Light borders */
+    --input: 0 0% 100%;              /* White inputs */
+    --ring: 46 100% 52%;             /* Yellow focus rings */
+
+    --radius: 0.5rem;                /* Slightly rounded */
+
+    /* Custom gradients with Zama colors - matching official website */
+    --gradient-primary: linear-gradient(135deg, hsl(46, 100%, 52%), hsl(46, 100%, 60%));
+    --gradient-subtle: linear-gradient(180deg, rgb(248, 242, 223), rgb(255, 255, 255));
+    --gradient-zama-hero: linear-gradient(to bottom, rgb(248, 242, 223) 0%, rgb(255, 255, 255) 100%);
+
+    /* Animation variables */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --glow-primary: 0 0 30px hsl(46, 100%, 52% / 0.3);
+    --glow-accent: 0 0 20px hsl(46, 100%, 52% / 0.2);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+
+    /* Chart colors for consistency with Zama theme */
+    --chart-1: 46 100% 52%;          /* Zama Gold */
+    --chart-2: 46 100% 60%;          /* Light Zama Gold */
+    --chart-3: 36 18% 11%;           /* Dark Brown */
+    --chart-4: 0 0% 45%;             /* Medium Gray */
+    --chart-5: 0 0% 90%;             /* Light Border */
+  }
+
+  /* Dark mode variant with Zama-inspired colors */
+  .dark {
+    --background: 36 18% 8%;         /* #141208 - Dark variant of Zama brown */
+    --foreground: 0 0% 98%;          /* #FAFAFA - Light text */
+
+    --card: 36 18% 10%;              /* Slightly lighter dark brown */
+    --card-foreground: 0 0% 98%;
+
+    --popover: 36 18% 10%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 46 100% 52%;          /* #FFD208 - Keep the Zama gold */
+    --primary-foreground: 36 18% 8%; /* Dark on gold */
+
+    --secondary: 36 18% 12%;         /* Dark secondary */
+    --secondary-foreground: 0 0% 80%; /* Light gray */
+
+    --muted: 36 18% 12%;
+    --muted-foreground: 0 0% 60%;    /* Medium gray */
+
+    --accent: 46 100% 52%;           /* Zama gold */
+    --accent-foreground: 36 18% 8%;
+
+    --border: 36 18% 18%;            /* Darker borders */
+    --input: 36 18% 12%;             /* Dark inputs */
+    --ring: 46 100% 52%;             /* Gold focus rings */
+
+    /* Dark mode gradients with Zama-inspired dark tones */
+    --gradient-primary: linear-gradient(135deg, hsl(46, 100%, 52%), hsl(46, 100%, 60%));
+    --gradient-subtle: linear-gradient(180deg, hsl(36, 18%, 10%), hsl(36, 18%, 8%));
+    --gradient-zama-hero: linear-gradient(to bottom, hsl(36, 18%, 12%) 0%, hsl(36, 18%, 8%) 100%);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground;
+  }
+}
+
+@layer components {
+  /* Hero gradient text effect */
+  .gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Glow effects */
+  .glow-primary {
+    box-shadow: var(--glow-primary);
+  }
+
+  .glow-accent {
+    box-shadow: var(--glow-accent);
+  }
+
+  /* Grid animation for hero */
+  .treasure-grid {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    grid-template-rows: repeat(10, 1fr);
+    gap: 4px;
+    width: 200px;
+    height: 200px;
+  }
+
+  .grid-dot {
+    width: 100%;
+    height: 100%;
+    background: hsl(var(--muted));
+    border-radius: 50%;
+    transition: var(--transition-smooth);
+  }
+
+  .grid-dot.active {
+    background: hsl(var(--primary));
+    box-shadow: var(--glow-primary);
+    animation: pulse 2s infinite;
+  }
+
+  .grid-dot.treasure {
+    background: hsl(var(--primary));
+    box-shadow: var(--glow-primary);
+    animation: treasure-glow 3s infinite;
+  }
+
+  /* Card hover effects */
+  .feature-card {
+    transition: var(--transition-smooth);
+    border: 1px solid hsl(var(--border));
+  }
+
+  .feature-card:hover {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 8px 32px hsl(var(--primary) / 0.1);
+    transform: translateY(-2px);
+  }
+}
+
+@layer utilities {
+  /* Animation keyframes */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  @keyframes treasure-glow {
+    0%, 100% {
+      box-shadow: var(--glow-primary);
+      transform: scale(1);
+    }
+    50% {
+      box-shadow: 0 0 40px hsl(var(--primary) / 0.6);
+      transform: scale(1.1);
+    }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+}
+
+/* Legacy Zama background class for backward compatibility */
 .zama-bg {
-  background-color: #ffd200;
+  background-color: hsl(var(--primary));
 }

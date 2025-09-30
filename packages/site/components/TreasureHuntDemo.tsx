@@ -5,6 +5,17 @@ import { useInMemoryStorage } from "../hooks/useInMemoryStorage";
 import { useMetaMaskEthersSigner } from "../hooks/metamask/useMetaMaskEthersSigner";
 import { useTreasureHunt } from "../hooks/useTreasureHunt";
 import { useState } from "react";
+import { errorNotDeployed } from "./ErrorNotDeployed";
+
+// FHEVM Network Configuration
+const SEPOLIA_CHAIN_ID = 11155111;
+const SEPOLIA_CHAIN_HEX = '0xaa36a7';
+const SEPOLIA_NETWORK_NAME = 'Sepolia';
+
+// Network validation functions
+const isSepoliaNetwork = (chainId: number | undefined): boolean => {
+  return chainId === SEPOLIA_CHAIN_ID;
+};
 
 /*
  * Main TreasureHunt React component for the encrypted treasure hunt game
@@ -17,6 +28,8 @@ import { useState } from "react";
 export const TreasureHuntDemo = () => {
   const { storage: fhevmDecryptionSignatureStorage } = useInMemoryStorage();
   const [selectedPosition, setSelectedPosition] = useState<{x: number, y: number} | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
 
   const {
     provider,
@@ -27,12 +40,14 @@ export const TreasureHuntDemo = () => {
     ethersReadonlyProvider,
     sameChain,
     sameSigner,
-    initialMockChains,
   } = useMetaMaskEthersSigner();
 
   //////////////////////////////////////////////////////////////////////////////
-  // FHEVM instance
+  // FHEVM instance - Only enable for Sepolia network
   //////////////////////////////////////////////////////////////////////////////
+
+  const isOnSepolia = isSepoliaNetwork(chainId);
+  const fhevmEnabled = isConnected && isOnSepolia;
 
   const {
     instance: fhevmInstance,
@@ -40,9 +55,8 @@ export const TreasureHuntDemo = () => {
     error: fhevmError,
   } = useFhevm({
     provider,
-    chainId,
-    initialMockChains,
-    enabled: true,
+    chainId: isOnSepolia ? chainId : undefined,
+    enabled: fhevmEnabled,
   });
 
   //////////////////////////////////////////////////////////////////////////////
@@ -67,11 +81,62 @@ export const TreasureHuntDemo = () => {
   // UI Components and Styling
   //////////////////////////////////////////////////////////////////////////////
 
-  const titleClass = "font-semibold text-black text-lg mt-4";
+  const titleClass = "font-semibold text-foreground text-lg mt-4";
 
   // Handle grid cell click - always allow selection, even without wallet
   const handleGridClick = (x: number, y: number) => {
     setSelectedPosition({ x, y });
+  };
+
+  // Handle MetaMask connection with loading state
+  const handleConnect = async (): Promise<void> => {
+    setIsConnecting(true);
+    try {
+      // Call connect without await since it handles its own async operations
+      connect();
+    } catch (error) {
+      console.error('Failed to connect to MetaMask:', error);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  // Handle network switch to Sepolia
+  const handleSwitchToSepolia = async (): Promise<void> => {
+    if (!provider) return;
+
+    setIsSwitchingNetwork(true);
+    try {
+      await provider.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: SEPOLIA_CHAIN_HEX }],
+      });
+    } catch (error: unknown) {
+      console.error('Failed to switch to Sepolia:', error);
+
+      // If the network doesn't exist, add it
+      if (error && typeof error === 'object' && 'code' in error && error.code === 4902) {
+        try {
+          await provider.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: SEPOLIA_CHAIN_HEX,
+              chainName: SEPOLIA_NETWORK_NAME,
+              rpcUrls: ['https://sepolia.infura.io/v3/'],
+              nativeCurrency: {
+                name: 'ETH',
+                symbol: 'ETH',
+                decimals: 18,
+              },
+            }],
+          });
+        } catch (addError) {
+          console.error('Failed to add Sepolia network:', addError);
+        }
+      }
+    } finally {
+      setIsSwitchingNetwork(false);
+    }
   };
 
   // Make guess with selected position
@@ -86,28 +151,43 @@ export const TreasureHuntDemo = () => {
     return { x: index % 8, y: Math.floor(index / 8) };
   };
 
+  // Show error if contract is not deployed
+  if (isConnected && isOnSepolia && treasureHunt.isDeployed === false) {
+    return errorNotDeployed(chainId);
+  }
+
   return (
     <section className="py-12 px-4 sm:px-6 lg:px-8">
       <div className="container mx-auto max-w-6xl">
         <div className="text-center mb-12">
-          <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-            Experience <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">FHE Magic</span>
+          <h2 className="text-3xl sm:text-4xl font-bold mb-4 text-foreground">
+            Experience <span className="gradient-text">FHE Magic</span>
           </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Watch how encrypted data is processed by smart contracts without revealing privacy
           </p>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-12 items-start">
           {/* Frontend Simulation */}
-          <div className="bg-white rounded-lg shadow-lg border p-6">
+          <div className="bg-card rounded-lg shadow-lg border border-border p-6">
             <div className="flex items-center space-x-2 mb-6">
-              <div className="w-6 h-6 bg-blue-600 rounded-full" />
-              <h3 className="text-xl font-semibold">Treasure Hunt DApp</h3>
+              <div className="w-6 h-6 bg-primary rounded-full" />
+              <h3 className="text-xl font-semibold text-card-foreground">Treasure Hunt DApp</h3>
             </div>
             <div className="space-y-6">
               {/* Game Grid */}
-              <div className="bg-gray-100 rounded-lg p-6">
+              <div className="bg-muted rounded-lg p-6">
+                <div className="text-center mb-4">
+                  <h4 className="text-sm font-medium text-muted-foreground mb-2">
+                    8×8 Treasure Hunt Grid
+                  </h4>
+                  {treasureHunt.isTreasureReady && !selectedPosition && (
+                    <p className="text-xs text-primary animate-pulse">
+                      👆 Click on any square to select coordinates for your guess
+                    </p>
+                  )}
+                </div>
                 <div className="grid grid-cols-8 gap-1 max-w-64 mx-auto">
                   {Array.from({ length: 64 }, (_, index) => {
                     const coords = indexToCoords(index);
@@ -122,9 +202,9 @@ export const TreasureHuntDemo = () => {
                       <div
                         key={index}
                         className={`w-6 h-6 rounded-sm transition-all duration-300 ${
-                          isTreasure ? 'bg-yellow-500 animate-pulse' :
-                          isSelected ? 'bg-blue-600 ring-2 ring-blue-300' : 'bg-gray-300'
-                        } cursor-pointer hover:bg-blue-400`}
+                          isTreasure ? 'bg-accent animate-pulse glow-accent' :
+                          isSelected ? 'bg-primary ring-2 ring-primary/30 glow-primary' : 'bg-muted-foreground/30'
+                        } cursor-pointer hover:bg-primary/60`}
                         onClick={() => handleGridClick(coords.x, coords.y)}
                         title={`Position (${coords.x}, ${coords.y})`}
                       />
@@ -134,12 +214,12 @@ export const TreasureHuntDemo = () => {
 
                 <div className="mt-4 text-center">
                   {selectedPosition && (
-                    <div className="text-blue-600 font-medium">
+                    <div className="text-primary font-medium">
                       Selected: ({selectedPosition.x}, {selectedPosition.y})
                     </div>
                   )}
                   {treasureHunt.decryptedDistance !== undefined && (
-                    <div className="text-green-600 font-medium">
+                    <div className="text-accent font-medium">
                       🎯 Distance: {treasureHunt.decryptedDistance}
                     </div>
                   )}
@@ -150,62 +230,117 @@ export const TreasureHuntDemo = () => {
               <div className="space-y-3">
                 {!isConnected && (
                   <button
-                    onClick={connect}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200"
+                    onClick={handleConnect}
+                    disabled={isConnecting}
+                    className="w-full bg-primary hover:bg-primary/80 text-primary-foreground font-semibold py-3 px-4 rounded-lg transition-colors duration-200 glow-primary disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Connect to MetaMask
+                    {isConnecting ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
+                        Connecting...
+                      </span>
+                    ) : (
+                      'Connect to MetaMask'
+                    )}
                   </button>
                 )}
 
-                {selectedPosition && (
+                {/* Network Switch Warning */}
+                {isConnected && !isOnSepolia && (
+                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+                    <div className="text-center space-y-3">
+                      <p className="text-sm text-destructive font-medium">
+                        ⚠️ Wrong Network Detected
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        FHEVM requires Sepolia network. Current: {chainId === 31337 ? 'Local' : chainId === 1 ? 'Mainnet' : `Chain ${chainId}`}
+                      </p>
+                      <button
+                        onClick={handleSwitchToSepolia}
+                        disabled={isSwitchingNetwork}
+                        className="w-full bg-destructive hover:bg-destructive/80 text-destructive-foreground font-semibold py-2 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isSwitchingNetwork ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <div className="w-4 h-4 border-2 border-destructive-foreground/30 border-t-destructive-foreground rounded-full animate-spin"></div>
+                            Switching to Sepolia...
+                          </span>
+                        ) : (
+                          'Switch to Sepolia Network'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isOnSepolia && treasureHunt.isTreasureReady && (
                   <button
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50"
-                    disabled={!isConnected || !treasureHunt.canMakeGuess}
+                    className="w-full bg-primary hover:bg-primary/80 text-primary-foreground font-semibold py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 glow-primary"
+                    disabled={!isConnected || !isOnSepolia || !treasureHunt.canMakeGuess || !fhevmInstance || !selectedPosition}
                     onClick={makeGuessAtSelectedPosition}
                   >
                     {!isConnected
-                      ? `Connect Wallet to Guess at (${selectedPosition.x}, ${selectedPosition.y})`
-                      : treasureHunt.isMakingGuess
-                        ? "Making Guess..."
-                        : `Make Guess at (${selectedPosition.x}, ${selectedPosition.y})`}
+                      ? "Connect Wallet to Make Guess"
+                      : !fhevmInstance
+                        ? "FHEVM Loading..."
+                        : !selectedPosition
+                          ? "Select Coordinates to Make Guess"
+                          : treasureHunt.isMakingGuess
+                            ? (
+                              <span className="flex items-center justify-center gap-2">
+                                <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></div>
+                                Making Guess...
+                              </span>
+                            )
+                            : `Make Guess at (${selectedPosition.x}, ${selectedPosition.y})`}
                   </button>
                 )}
 
-                {(treasureHunt.canDecrypt || treasureHunt.encryptedDistance) && (
+                {treasureHunt.isTreasureReady && (treasureHunt.canDecrypt || treasureHunt.encryptedDistance) && isOnSepolia && (
                   <button
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50"
-                    disabled={!isConnected || !treasureHunt.canDecrypt}
+                    className="w-full bg-accent hover:bg-accent/80 text-accent-foreground font-semibold py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 glow-accent"
+                    disabled={!isConnected || !isOnSepolia || !treasureHunt.canDecrypt || !fhevmInstance}
                     onClick={treasureHunt.decryptDistance}
                   >
                     {!isConnected
                       ? "Connect Wallet to Decrypt Distance"
-                      : treasureHunt.isDecrypting
-                        ? "Decrypting..."
-                        : "Decrypt Distance"}
+                      : !fhevmInstance
+                        ? "FHEVM Loading..."
+                        : treasureHunt.isDecrypting
+                          ? "Decrypting..."
+                          : "Decrypt Distance"}
                   </button>
                 )}
 
-                {(treasureHunt.canCreateTreasure || treasureHunt.isOwner) && (
+                {isConnected && isOnSepolia && treasureHunt.isTreasureReady === false && (
                   <button
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50"
-                    disabled={!isConnected || !treasureHunt.canCreateTreasure}
+                    className="w-full bg-primary hover:bg-primary/80 text-primary-foreground font-semibold py-3 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 glow-primary"
+                    disabled={!isConnected || !isOnSepolia || !treasureHunt.canCreateTreasure || !fhevmInstance}
                     onClick={treasureHunt.createTreasure}
                   >
                     {!isConnected
                       ? "Connect Wallet to Create Treasure"
-                      : treasureHunt.isCreatingTreasure
-                        ? "Creating Treasure..."
-                        : "Create Treasure"}
+                      : !fhevmInstance
+                        ? "FHEVM Loading..."
+                        : !treasureHunt.isOwner
+                          ? "Create Treasure (Owner Only)"
+                          : treasureHunt.isCreatingTreasure
+                            ? "Creating Treasure..."
+                            : "Create Treasure"}
                   </button>
                 )}
               </div>
 
               {/* Status Message */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
-                  {isConnected
-                    ? treasureHunt.message
-                    : "Connect your wallet to start playing the treasure hunt game"}
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
+                <p className="text-sm text-primary">
+                  {!isConnected
+                    ? "Connect your wallet to start playing the treasure hunt game"
+                    : !isOnSepolia
+                      ? "Please switch to Sepolia network to enable FHEVM functionality"
+                      : !fhevmInstance
+                        ? "Initializing FHEVM instance for encrypted computation..."
+                        : treasureHunt.message || "FHEVM treasure hunt is ready! Select coordinates to make a guess."}
                 </p>
               </div>
             </div>
@@ -214,20 +349,65 @@ export const TreasureHuntDemo = () => {
           {/* Game Status and Info */}
           <div className="space-y-6">
             {/* Game Status */}
-            <div className="bg-white rounded-lg border-2 border-black p-6">
-              <h2 className="text-xl font-semibold mb-4">Game Status</h2>
+            <div className="bg-card rounded-lg border border-border p-6">
+              <h2 className="text-xl font-semibold mb-4 text-card-foreground">Game Status</h2>
 
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
+                  <span>Wallet Connected:</span>
+                  <span className={isConnected ? "text-accent font-semibold" : "text-destructive"}>
+                    {isConnected ? "Yes" : "No"}
+                  </span>
+                </div>
+
+                {isConnected && chainId && (
+                  <div className="flex justify-between">
+                    <span>Network:</span>
+                    <span className={`font-mono ${isOnSepolia ? "text-accent font-semibold" : "text-destructive"}`}>
+                      {chainId === 31337 ? "Local (31337)" :
+                       chainId === 11155111 ? "Sepolia (11155111)" :
+                       chainId === 1 ? "Mainnet (1)" :
+                       `Chain ${chainId}`}
+                      {isOnSepolia && " ✅"}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex justify-between">
+                  <span>FHEVM Instance:</span>
+                  <span className={fhevmInstance ? "text-accent font-semibold" : "text-destructive"}>
+                    {fhevmInstance ? "Ready" : fhevmEnabled ? "Loading..." : "Disabled"}
+                  </span>
+                </div>
+
+                {fhevmStatus && (
+                  <div className="flex justify-between">
+                    <span>FHEVM Status:</span>
+                    <span className="font-mono text-muted-foreground">
+                      {fhevmStatus}
+                    </span>
+                  </div>
+                )}
+
+                {fhevmError && (
+                  <div className="flex justify-between">
+                    <span>FHEVM Error:</span>
+                    <span className="font-mono text-destructive text-xs">
+                      {fhevmError.message}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex justify-between">
                   <span>Treasure Ready:</span>
-                  <span className={treasureHunt.isTreasureReady ? "text-green-600 font-semibold" : "text-red-600"}>
+                  <span className={treasureHunt.isTreasureReady ? "text-accent font-semibold" : "text-destructive"}>
                     {treasureHunt.isTreasureReady ? "Yes" : "No"}
                   </span>
                 </div>
 
                 <div className="flex justify-between">
                   <span>You are Owner:</span>
-                  <span className={treasureHunt.isOwner ? "text-blue-600 font-semibold" : "text-gray-600"}>
+                  <span className={treasureHunt.isOwner ? "text-primary font-semibold" : "text-muted-foreground"}>
                     {treasureHunt.isOwner ? "Yes" : "No"}
                   </span>
                 </div>
@@ -235,7 +415,7 @@ export const TreasureHuntDemo = () => {
                 {treasureHunt.decryptedDistance !== undefined && (
                   <div className="flex justify-between">
                     <span>Distance to Treasure:</span>
-                    <span className="font-semibold text-blue-600">
+                    <span className="font-semibold text-primary">
                       {treasureHunt.decryptedDistance}
                     </span>
                   </div>
@@ -244,9 +424,9 @@ export const TreasureHuntDemo = () => {
             </div>
 
             {/* Instructions */}
-            <div className="bg-blue-50 rounded-lg border-2 border-blue-200 p-6">
-              <h2 className="text-xl font-semibold mb-4 text-blue-800">How to Play</h2>
-              <ol className="list-decimal list-inside space-y-2 text-sm text-blue-700">
+            <div className="bg-primary/5 rounded-lg border border-primary/20 p-6">
+              <h2 className="text-xl font-semibold mb-4 text-primary">How to Play</h2>
+              <ol className="list-decimal list-inside space-y-2 text-sm text-primary/80">
                 <li>Owner creates a treasure at a random encrypted location</li>
                 <li>Players click on grid cells to select coordinates</li>
                 <li>Click &ldquo;Make Guess&rdquo; to submit encrypted coordinates</li>
@@ -256,9 +436,9 @@ export const TreasureHuntDemo = () => {
             </div>
 
             {/* Current Message */}
-            <div className="bg-gray-100 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">Status</h3>
-              <p className="text-sm text-gray-700">
+            <div className="bg-muted rounded-lg p-4">
+              <h3 className="font-semibold mb-2 text-foreground">Status</h3>
+              <p className="text-sm text-muted-foreground">
                 {treasureHunt.message}
               </p>
             </div>
@@ -268,7 +448,7 @@ export const TreasureHuntDemo = () => {
         {/* Debug Info */}
         <div className="grid md:grid-cols-3 gap-6 mt-8">
           {/* Chain Info */}
-          <div className="bg-white rounded-lg border-2 border-black p-4">
+          <div className="bg-card rounded-lg border border-border p-4">
             <h3 className={titleClass}>Chain Info</h3>
             {printProperty("Chain ID", chainId)}
             {printProperty("Contract Address", treasureHunt.contractAddress)}
@@ -276,7 +456,7 @@ export const TreasureHuntDemo = () => {
           </div>
 
           {/* FHEVM Instance */}
-          <div className="bg-white rounded-lg border-2 border-black p-4">
+          <div className="bg-card rounded-lg border border-border p-4">
             <h3 className={titleClass}>FHEVM Instance</h3>
             {printProperty("Instance", fhevmInstance ? "Ready" : "Loading")}
             {printProperty("Status", fhevmStatus)}
@@ -284,9 +464,9 @@ export const TreasureHuntDemo = () => {
           </div>
 
           {/* Game Data */}
-          <div className="bg-white rounded-lg border-2 border-black p-4">
+          <div className="bg-card rounded-lg border border-border p-4">
             <h3 className={titleClass}>Game Data</h3>
-            {printProperty("Encrypted Distance", treasureHunt.encryptedDistance ?? "None")}
+            {printProperty("Encrypted Distance", formatEncryptedDistance(treasureHunt.encryptedDistance))}
             {printProperty("Is Decrypted", treasureHunt.isDecrypted)}
             {printProperty("Can Make Guess", treasureHunt.canMakeGuess)}
           </div>
@@ -294,11 +474,11 @@ export const TreasureHuntDemo = () => {
 
         {/* Owner Controls */}
         {treasureHunt.isOwner && (
-          <div className="mt-8 bg-yellow-50 rounded-lg border-2 border-yellow-200 p-6">
-            <h3 className="text-xl font-semibold mb-4 text-yellow-800">Owner Controls</h3>
+          <div className="mt-8 bg-accent/5 rounded-lg border border-accent/20 p-6">
+            <h3 className="text-xl font-semibold mb-4 text-accent">Owner Controls</h3>
             <div className="flex gap-4">
               <button
-                className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-3 font-semibold text-white shadow-sm transition-colors duration-200 hover:bg-blue-700 active:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
+                className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground shadow-sm transition-colors duration-200 hover:bg-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:pointer-events-none"
                 onClick={treasureHunt.refreshGameState}
                 disabled={!treasureHunt.canRefresh}
               >
@@ -306,11 +486,12 @@ export const TreasureHuntDemo = () => {
               </button>
 
               <button
-                className="inline-flex items-center justify-center rounded-xl bg-black px-4 py-3 font-semibold text-white shadow-sm transition-colors duration-200 hover:bg-blue-700 active:bg-blue-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
+                className="inline-flex items-center justify-center rounded-xl bg-destructive px-4 py-3 font-semibold text-destructive-foreground shadow-sm transition-colors duration-200 hover:bg-destructive/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive disabled:opacity-50 disabled:pointer-events-none"
                 onClick={treasureHunt.resetGame}
-                disabled={treasureHunt.isCreatingTreasure}
+                disabled={!isConnected || !treasureHunt.isOwner || treasureHunt.isCreatingTreasure}
+                title={!treasureHunt.isOwner ? "Only contract owner can reset the game" : "Reset the treasure hunt game"}
               >
-                Reset Game
+                {!treasureHunt.isOwner ? "Reset Game (Owner Only)" : "Reset Game"}
               </button>
             </div>
           </div>
@@ -321,6 +502,17 @@ export const TreasureHuntDemo = () => {
 };
 
 // Helper functions for debug info display
+function formatEncryptedDistance(value: string | undefined): string {
+  if (!value || value === "None") return "None";
+  if (value === "0x0000000000000000000000000000000000000000000000000000000000000000") {
+    return "0x0000...0000 (Empty)";
+  }
+  if (value.length > 20) {
+    return `${value.substring(0, 10)}...${value.substring(value.length - 6)}`;
+  }
+  return value;
+}
+
 function printProperty(name: string, value: unknown) {
   let displayValue: string;
 
@@ -341,9 +533,9 @@ function printProperty(name: string, value: unknown) {
   }
 
   return (
-    <p className="text-black text-xs">
+    <p className="text-card-foreground text-xs">
       {name}:{" "}
-      <span className="font-mono font-semibold text-black">{displayValue}</span>
+      <span className="font-mono font-semibold text-card-foreground">{displayValue}</span>
     </p>
   );
 }
@@ -351,17 +543,17 @@ function printProperty(name: string, value: unknown) {
 function printBooleanProperty(name: string, value: boolean) {
   if (value) {
     return (
-      <p className="text-black text-xs">
+      <p className="text-card-foreground text-xs">
         {name}:{" "}
-        <span className="font-mono font-semibold text-green-500">true</span>
+        <span className="font-mono font-semibold text-accent">true</span>
       </p>
     );
   }
 
   return (
-    <p className="text-black text-xs">
+    <p className="text-card-foreground text-xs">
       {name}:{" "}
-      <span className="font-mono font-semibold text-red-500">false</span>
+      <span className="font-mono font-semibold text-destructive">false</span>
     </p>
   );
 }

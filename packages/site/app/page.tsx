@@ -2,14 +2,14 @@ import { TreasureHuntDemo } from "@/components/TreasureHuntDemo";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gradient-zama-hero">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          <h1 className="text-5xl font-bold mb-4 gradient-text">
             FHEVM Treasure Hunt
           </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
             Experience Fully Homomorphic Encryption in action with this interactive treasure hunt game
           </p>
         </div>

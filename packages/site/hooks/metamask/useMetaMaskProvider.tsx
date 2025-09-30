@@ -82,28 +82,67 @@ function useMetaMaskInternal(): UseMetaMaskState {
 
   const isConnected = hasProvider && hasAccounts && hasChain;
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!_currentProvider) {
+      console.warn('[useMetaMask] No MetaMask provider available');
       return;
     }
 
     if (accounts && accounts.length > 0) {
       // already connected
+      console.log('[useMetaMask] Already connected');
       return;
     }
 
-    // Prompt connection
-    _currentProvider.request({ method: "eth_requestAccounts" });
+    try {
+      console.log('[useMetaMask] Requesting account access...');
+      // Prompt connection
+      await _currentProvider.request({ method: "eth_requestAccounts" });
+      console.log('[useMetaMask] Account access granted');
+    } catch (error) {
+      console.error('[useMetaMask] Failed to connect:', error);
+      // User denied account access or other error occurred
+    }
   }, [_currentProvider, accounts]);
 
   useEffect(() => {
     let next: Eip1193ProviderWithEvent | undefined = undefined;
-    for (let i = 0; i < providers.length; ++i) {
-      if (providers[i].info.name.toLowerCase() === "metamask") {
-        next = providers[i].provider;
-        break;
+
+    // Priority-based wallet selection: MetaMask → OKX Wallet → first available
+    const selectWalletByPriority = () => {
+      // Log all detected wallets for debugging
+      console.log(`[useMetaMask] Detected ${providers.length} wallets:`,
+        providers.map(p => p.info.name).join(', '));
+
+      // First priority: MetaMask
+      for (let i = 0; i < providers.length; ++i) {
+        const name = providers[i].info.name.toLowerCase();
+        if (name === "metamask") {
+          console.log('[useMetaMask] Selected MetaMask wallet');
+          return providers[i].provider;
+        }
       }
-    }
+
+      // Second priority: OKX Wallet
+      for (let i = 0; i < providers.length; ++i) {
+        const name = providers[i].info.name.toLowerCase();
+        if (name === "okx wallet" || name.includes("okx")) {
+          console.log('[useMetaMask] Selected OKX Wallet');
+          return providers[i].provider;
+        }
+      }
+
+      // Fallback: first available wallet
+      if (providers.length > 0) {
+        console.log(`[useMetaMask] Selected first available wallet: ${providers[0].info.name}`);
+        return providers[0].provider;
+      }
+
+      console.log('[useMetaMask] No wallets available');
+      return undefined;
+    };
+
+    next = selectWalletByPriority();
 
     const prev = metaMaskProviderRef.current;
     if (prev === next) {

@@ -1,6 +1,6 @@
 import { FhevmInstance, FhevmDecryptionSignature, type GenericStringStorage } from "@fhevm/react";
 import { Contract, JsonRpcProvider, JsonRpcSigner } from "ethers";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TreasureHuntABI } from "../abi/TreasureHuntABI";
 import { TreasureHuntAddresses } from "../abi/TreasureHuntAddresses";
 
@@ -90,6 +90,9 @@ export function useTreasureHunt({
   const [isMakingGuess, setIsMakingGuess] = useState(false);
   const [message, setMessage] = useState("Connect wallet to start playing");
 
+  // Ref to prevent duplicate refresh calls
+  const isRefreshingRef = useRef(false);
+
   // Capabilities
   const canCreateTreasure = useMemo(() => {
     return !isCreatingTreasure && isOwner && isDeployed && sameChain && sameSigner && !isTreasureReady;
@@ -99,19 +102,19 @@ export function useTreasureHunt({
     return !isMakingGuess && isDeployed && sameChain && sameSigner && isTreasureReady && instance;
   }, [isMakingGuess, isDeployed, sameChain, sameSigner, isTreasureReady, instance]);
 
-  const canDecrypt = useMemo(() => {
-    return !isDecrypting && !!encryptedDistance && !isDecrypted && !!instance;
-  }, [isDecrypting, encryptedDistance, isDecrypted, instance]);
-
-  const canRefresh = useMemo(() => {
-    return !isRefreshing && isDeployed && sameChain;
-  }, [isRefreshing, isDeployed, sameChain]);
-
   // Contract instance
   const contract = useMemo(() => {
     if (!contractAddress || !ethersReadonlyProvider) return null;
     return new Contract(contractAddress, TreasureHuntABI.abi, ethersReadonlyProvider);
   }, [contractAddress, ethersReadonlyProvider]);
+
+  const canDecrypt = useMemo(() => {
+    return !isDecrypting && !!encryptedDistance && !isDecrypted && !!instance;
+  }, [isDecrypting, encryptedDistance, isDecrypted, instance]);
+
+  const canRefresh = useMemo(() => {
+    return !isRefreshing && isDeployed && sameChain && !!contract;
+  }, [isRefreshing, isDeployed, sameChain, contract]);
 
   const contractWithSigner = useMemo(() => {
     if (!contractAddress || !ethersSigner) return null;
@@ -120,7 +123,10 @@ export function useTreasureHunt({
 
   // Check ownership
   useEffect(() => {
-    if (!contract || !ethersSigner) return;
+    if (!contract || !ethersSigner || !isDeployed) {
+      setIsOwner(false);
+      return;
+    }
 
     const checkOwnership = async () => {
       try {
@@ -134,49 +140,93 @@ export function useTreasureHunt({
     };
 
     checkOwnership();
-  }, [contract, ethersSigner]);
+  }, [contract, ethersSigner, isDeployed]);
 
   // Refresh game state
-  const refreshGameState = async () => {
-    if (!contract) return;
+  const refreshGameState = useCallback(async () => {
+    if (!contract || !isDeployed || isRefreshingRef.current) {
+      console.log('[useTreasureHunt] refreshGameState skipped', {
+        contract: !!contract,
+        isDeployed,
+        isRefreshing: isRefreshingRef.current
+      });
+      return;
+    }
 
+    console.log('[useTreasureHunt] Starting refreshGameState...');
+    isRefreshingRef.current = true;
     setIsRefreshing(true);
-    setMessage("Refreshing game state...");
 
     try {
       // Check if treasure is ready
       const treasureReady = await contract.isTreasureReady();
+      console.log('[useTreasureHunt] Treasure ready:', treasureReady);
       setIsTreasureReady(treasureReady);
 
       if (ethersSigner) {
         // Get user's encrypted distance if exists
         const userAddress = await ethersSigner.getAddress();
+        console.log('[useTreasureHunt] User address:', userAddress);
+
         const userDistance = await contract.userDistances(userAddress);
+        console.log('[useTreasureHunt] User distance:', userDistance);
 
         if (userDistance && userDistance !== "0x0000000000000000000000000000000000000000") {
           setEncryptedDistance(userDistance);
           setIsDecrypted(false);
-          setMessage("Click 'Decrypt Distance' to see how close you are");
-        } else if (treasureReady) {
-          setMessage("Click on the grid to make your guess");
         } else {
-          setMessage(isOwner ? "Create treasure to start the game" : "Waiting for treasure to be created");
+          setEncryptedDistance(undefined);
+          setIsDecrypted(false);
         }
       }
+
+      console.log('[useTreasureHunt] Game state refreshed successfully');
     } catch (error) {
       console.error("Error refreshing game state:", error);
       setMessage("Error refreshing game state");
     }
 
     setIsRefreshing(false);
-  };
+    isRefreshingRef.current = false;
+  }, [contract, isDeployed, ethersSigner]);
 
   // Auto-refresh on load
   useEffect(() => {
-    if (canRefresh) {
-      refreshGameState();
+    const doRefresh = async () => {
+      if (isDeployed && sameChain && !!contract && !isRefreshingRef.current) {
+        await refreshGameState();
+      }
+    };
+    doRefresh();
+  }, [isDeployed, sameChain, contract, refreshGameState]);
+
+  // Update message based on connection and game state
+  useEffect(() => {
+    console.log('[useTreasureHunt] Message update check:', {
+      ethersSigner: !!ethersSigner,
+      sameChain,
+      isDeployed,
+      isTreasureReady,
+      isOwner,
+      encryptedDistance
+    });
+
+    if (!ethersSigner) {
+      setMessage("Connect wallet to start playing");
+    } else if (!sameChain) {
+      setMessage("Please switch to the correct network");
+    } else if (!isDeployed) {
+      setMessage("Contract not deployed on this network");
+    } else if (isTreasureReady === undefined) {
+      setMessage("Loading game state...");
+    } else if (!isTreasureReady) {
+      setMessage(isOwner ? "Create treasure to start the game" : "Waiting for treasure to be created");
+    } else if (encryptedDistance && encryptedDistance !== "0x0000000000000000000000000000000000000000") {
+      setMessage("Click 'Decrypt Distance' to see how close you are");
+    } else {
+      setMessage("Click on the grid to make your guess");
     }
-  }, [canRefresh]);
+  }, [ethersSigner, sameChain, isDeployed, isTreasureReady, isOwner, encryptedDistance]);
 
   // Create treasure
   const createTreasure = async () => {
@@ -213,6 +263,9 @@ export function useTreasureHunt({
       // Encrypt coordinates
       const signerAddress = await ethersSigner!.getAddress();
 
+      console.log(`signerAddress: ${signerAddress}`)
+      console.log(`contractAddress: ${contractAddress}`)
+
       const encryptedInputX = await instance
         .createEncryptedInput(contractAddress, signerAddress)
         .add8(x)
@@ -223,8 +276,10 @@ export function useTreasureHunt({
         .add8(y)
         .encrypt();
 
+      console.log(`submit guess: ${encryptedInputX}, ${encryptedInputY}`)
       setMessage("Submitting encrypted guess...");
 
+      console.log(encryptedInputX.handles[0])
       const tx = await contractWithSigner.guess(
         encryptedInputX.handles[0],
         encryptedInputY.handles[0],

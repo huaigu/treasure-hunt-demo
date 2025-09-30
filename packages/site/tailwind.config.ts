@@ -53,11 +53,20 @@ export default {
       },
       backgroundImage: {
         noise: "url('/noise.svg')",
+        'gradient-primary': 'var(--gradient-primary)',
+        'gradient-subtle': 'var(--gradient-subtle)',
+        'gradient-zama-hero': 'var(--gradient-zama-hero)',
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      animation: {
+        "fade-in": "fade-in 0.6s ease-out",
+        "slide-up": "slide-up 0.5s ease-out",
+        "pulse": "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "float": "float 3s ease-in-out infinite",
       },
     },
   },
