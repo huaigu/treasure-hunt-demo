@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {FHE, euint8, externalEuint8} from "@fhevm/solidity/lib/FHE.sol";
+import {FHE, euint8, externalEuint8, ebool} from "@fhevm/solidity/lib/FHE.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SepoliaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
 
@@ -24,26 +24,72 @@ contract TreasureHunt is Ownable, SepoliaConfig {
     // Constructor calls Ownable constructor, setting the deployer as owner
     constructor() Ownable(msg.sender) {}
 
-    /// @notice Creates a treasure at a random encrypted location (only owner)
-    /// @dev Uses FHEVM's cryptographically secure random number generation
-    function createTreasure() external onlyOwner {
+   function createTreasure() external onlyOwner {
         require(!isTreasureSet, "Treasure is already set!");
 
-        // Generate encrypted random coordinates using FHEVM's secure RNG
-        // For a treasure hunt game, we can use coordinates 0-63 (8x8 grid)
-        secretX = FHE.randEuint8(64); // Random number between 0-63
-        secretY = FHE.randEuint8(64); // Random number between 0-63
+        // Generate full-domain random and reduce to 0..7 so it's in same domain as later computations
+        // randEuint8() -> full-domain euint8; rem expects a plaintext divisor
+        secretX = FHE.rem(FHE.randEuint8(), 8);
+        secretY = FHE.rem(FHE.randEuint8(), 8);
 
         isTreasureSet = true;
         emit TreasureCreated();
     }
 
     /// @notice Submit an encrypted guess for the treasure location
+    function guess(
+        externalEuint8 inputX,
+        externalEuint8 inputY,
+        bytes calldata proofX,
+        bytes calldata proofY
+    ) external {
+        require(isTreasureSet, "Treasure has not been set yet!");
+
+        // Convert external inputs and reduce them to 0..7 to match secretX/secretY domain
+        euint8 guessX = FHE.rem(FHE.fromExternal(inputX, proofX), 8);
+        euint8 guessY = FHE.rem(FHE.fromExternal(inputY, proofY), 8);
+
+        // X-axis absolute diff: do both orders and select based on comparison
+        euint8 diffX1 = FHE.sub(guessX, secretX);
+        euint8 diffX2 = FHE.sub(secretX, guessX);
+        ebool condX = FHE.gt(guessX, secretX); // true when guessX > secretX
+        euint8 distX = FHE.select(condX, diffX1, diffX2);
+
+        // Y-axis absolute diff
+        euint8 diffY1 = FHE.sub(guessY, secretY);
+        euint8 diffY2 = FHE.sub(secretY, guessY);
+        ebool condY = FHE.gt(guessY, secretY);
+        euint8 distY = FHE.select(condY, diffY1, diffY2);
+
+        // Manhattan distance
+        euint8 distance = FHE.add(distX, distY);
+
+        // Grant the caller persistent permission to decrypt/use the distance, and
+        // optionally grant this contract permission to store/use it later.
+        FHE.allow(distance, msg.sender);
+        FHE.allow(distance, address(this));
+
+        // Store distance handle in mapping (handle is encrypted)
+        userDistances[msg.sender] = distance;
+
+        emit GuessSubmitted(msg.sender);
+
+        // Determine whether distance == 0 (treasure found) as encrypted boolean
+        euint8 zero = FHE.asEuint8(0);
+        ebool treasureFound = FHE.eq(distance, zero);
+
+        // If you want to trigger an on-chain action when treasureFound is true,
+        // remember you cannot `if (treasureFound)` on-chain — comparisons yield encrypted booleans.
+        // Use FHE.select to create a side-effect-free encrypted value, or request decryption to learn plaintext.
+    }
+
+
+    /// @notice Simple test function that just adds coordinates together (for testing)
     /// @param inputX the encrypted X coordinate input
     /// @param inputY the encrypted Y coordinate input
     /// @param proofX the input proof for X coordinate
     /// @param proofY the input proof for Y coordinate
-    function guess(
+    function guessSimple(
         externalEuint8 inputX,
         externalEuint8 inputY,
         bytes calldata proofX,
@@ -54,28 +100,17 @@ contract TreasureHunt is Ownable, SepoliaConfig {
         euint8 guessX = FHE.fromExternal(inputX, proofX);
         euint8 guessY = FHE.fromExternal(inputY, proofY);
 
-        // Calculate absolute differences using FHE.max and FHE.sub for X and Y axes
-        euint8 distX = FHE.max(FHE.sub(guessX, secretX), FHE.sub(secretX, guessX));
-        euint8 distY = FHE.max(FHE.sub(guessY, secretY), FHE.sub(secretY, guessY));
+        // SIMPLIFIED TEST VERSION: Just add the coordinates together
+        euint8 simpleResult = FHE.add(guessX, guessY);
 
-        // Calculate Manhattan distance using FHE.add
-        euint8 distance = FHE.add(distX, distY);
+        // Grant permissions for decryption
+        FHE.allow(simpleResult, msg.sender);
+        FHE.allowThis(simpleResult);
 
-        // Critical step: Grant msg.sender permission to decrypt this distance value on-chain
-        // Without this line, the Relayer will reject the user's off-chain decryption request
-        FHE.allow(distance, msg.sender);
-        FHE.allowThis(distance);
-
-        // Store the encrypted distance with decryption permission in the mapping
-        userDistances[msg.sender] = distance;
+        // Store the simple result as "distance" for testing
+        userDistances[msg.sender] = simpleResult;
 
         emit GuessSubmitted(msg.sender);
-
-        // Check if treasure is found (distance == 0)
-        // Note: This check happens on encrypted values, maintaining privacy
-        euint8 zero = FHE.asEuint8(0);
-        // In a more advanced implementation, you could emit TreasureFound event
-        // when distance equals zero, but this would require additional FHE operations
     }
 
     /// @notice Get the encrypted distance for the caller

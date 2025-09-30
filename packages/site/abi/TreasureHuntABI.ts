@@ -150,6 +150,34 @@ export const TreasureHuntABI = {
       "type": "function"
     },
     {
+      "inputs": [
+        {
+          "internalType": "externalEuint8",
+          "name": "inputX",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "externalEuint8",
+          "name": "inputY",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes",
+          "name": "proofX",
+          "type": "bytes"
+        },
+        {
+          "internalType": "bytes",
+          "name": "proofY",
+          "type": "bytes"
+        }
+      ],
+      "name": "guessSimple",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
       "inputs": [],
       "name": "isTreasureReady",
       "outputs": [
